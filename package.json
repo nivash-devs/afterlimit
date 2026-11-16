@@ -1,0 +1,35 @@
+{
+  "name": "afterlimit",
+  "version": "0.1.0",
+  "description": "Switch between Claude Code and Codex when one hits its usage limit, without re-explaining your project.",
+  "type": "module",
+  "bin": {
+    "afterlimit": "bin/afterlimit.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "ai-agents",
+    "handoff",
+    "usage-limit",
+    "cli"
+  ],
+  "author": "Nivash",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nivash-devs/afterlimit.git"
+  },
+  "homepage": "https://github.com/nivash-devs/afterlimit#readme",
+  "bugs": {
+    "url": "https://github.com/nivash-devs/afterlimit/issues"
+  }
+}
