@@ -292,7 +292,7 @@ footer { padding-block: 24px 40px; border-top: 1px solid var(--line); color: var
     "",
     "## Done so far",
     "- src/note.ts: buildNote() writes all nine sections to HANDOFF.md",
-    "- src/cli.ts: `handshift note` command wired up",
+    "- src/cli.ts: `afterlimit note` command wired up",
     "",
     "## Tried and failed",
     "- Matching the exact limit message text. The wording changes between versions, so the regex broke twice.",
@@ -382,8 +382,8 @@ footer { padding-block: 24px 40px; border-top: 1px solid var(--line); color: var
     sel.value = value;
   }
 
-  function store(k, v) { try { localStorage.setItem("handshift:" + k, v); } catch (e) {} }
-  function load(k) { try { return localStorage.getItem("handshift:" + k); } catch (e) { return null; } }
+  function store(k, v) { try { localStorage.setItem("afterlimit:" + k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem("afterlimit:" + k); } catch (e) { return null; } }
 
   function render() {
     var note = $("note").value;
