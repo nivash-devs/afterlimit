@@ -2,6 +2,8 @@
 
 Your AI hit its limit. Your work didn't.
 
+Website: https://nivash-devs.github.io/afterlimit/
+
 `afterlimit` lets you switch between Claude Code and Codex mid-task without re-explaining your project. Both agents keep one shared handoff note up to date while they work. When one runs out of usage, a single command starts the other with that note, so it picks up at the next step instead of from zero.
 
 ```bash

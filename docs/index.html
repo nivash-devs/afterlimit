@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Switch between Claude Code and Codex when one hits its usage limit, without re-explaining your project.">
+<title>afterlimit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a shift-handover board. Hero with a live shift log, then three steps that run left to right on desktop and stack on phones. */
+:root {
+  --bg: #f2f4f7;
+  --panel: #ffffff;
+  --ink: #12161f;
+  --muted: #5a6273;
+  --line: #d9dee7;
+  --accent: #2b45e8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4e8fd;
+  --ok: #18794e;
+  --ok-soft: #dcf3e6;
+  --warn: #a35200;
+  --warn-soft: #fdebd6;
+  --code-bg: #f7f8fb;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1218; --panel: #171b24; --ink: #e8ebf2; --muted: #9aa3b5; --line: #2a303d;
+    --accent: #7d8fff; --accent-ink: #0f1218; --accent-soft: #1f2645;
+    --ok: #5fd39a; --ok-soft: #13301f; --warn: #ffb15c; --warn-soft: #3a2611; --code-bg: #12161e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1218; --panel: #171b24; --ink: #e8ebf2; --muted: #9aa3b5; --line: #2a303d;
+  --accent: #7d8fff; --accent-ink: #0f1218; --accent-soft: #1f2645;
+  --ok: #5fd39a; --ok-soft: #13301f; --warn: #ffb15c; --warn-soft: #3a2611; --code-bg: #12161e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+
+header.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-block: 20px; border-bottom: 1px solid var(--line);
+}
+.mark { display: flex; align-items: center; gap: 10px; font-family: var(--f-display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
+.mark svg { flex: none; }
+.tag { font-family: var(--f-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+
+.hero {
+  display: grid; grid-template-columns: 1.15fr 1fr; gap: 48px; align-items: center;
+  padding-block: 56px 48px;
+}
+.hero > * { min-width: 0; }
+h1 {
+  font-family: var(--f-display); font-weight: 800; letter-spacing: -0.035em;
+  font-size: clamp(40px, 6vw, 68px); line-height: 0.98; margin: 0 0 20px; text-wrap: balance;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.lede { font-size: 18px; color: var(--muted); max-width: 34em; margin: 0; }
+
+.log {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  font-family: var(--f-mono); font-size: 13px; overflow: hidden;
+}
+.log-head { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.log-row { display: grid; grid-template-columns: 48px 1fr auto; gap: 12px; padding: 11px 14px; border-bottom: 1px dashed var(--line); align-items: baseline; }
+.log-row:last-child { border-bottom: 0; }
+.log-row time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.info { background: var(--accent-soft); color: var(--accent); }
+.log-foot { padding: 8px 14px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); background: var(--code-bg); }
+
+section.steps { padding-block: 24px 56px; }
+.steps-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+h2 { font-family: var(--f-display); font-weight: 700; font-size: 30px; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+.steps-head p { margin: 0; color: var(--muted); max-width: 30em; }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.step-n { font-family: var(--f-mono); font-size: 12px; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.step h3 { font-family: var(--f-display); font-weight: 700; font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+.step p { margin: 0; color: var(--muted); font-size: 15px; }
+
+label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px; }
+select, textarea {
+  width: 100%; font: inherit; color: var(--ink); background: var(--code-bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+textarea { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; resize: vertical; min-height: 220px; }
+pre.box {
+  margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto;
+}
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 > * { min-width: 0; }
+
+button {
+  font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
+  border-radius: 8px; padding: 11px 16px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--accent-ink);
+}
+button.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.copied { font-size: 13px; color: var(--ok); }
+
+.checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.chk { font-family: var(--f-mono); font-size: 11.5px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
+.chk.have { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.chk.miss { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.score { font-size: 14px; }
+.score b { font-variant-numeric: tabular-nums; }
+.example { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+
+.tip { font-size: 14px; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+.tip code { font-family: var(--f-mono); font-size: 12.5px; color: var(--ink); }
+
+.why { display: grid; grid-template-columns: 1fr 1.4fr; gap: 48px; padding-block: 48px; border-top: 1px solid var(--line); }
+.why > * { min-width: 0; }
+.why p { margin: 0 0 14px; max-width: 62ch; }
+.why p:last-child { margin-bottom: 0; }
+
+footer { padding-block: 24px 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 920px) {
+  .hero, .why { grid-template-columns: 1fr; gap: 32px; }
+  .grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 420px) {
+  .row2 { grid-template-columns: 1fr; }
+  .log-row { grid-template-columns: 40px 1fr; }
+  .log-row .pill { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .log-row { animation: rowIn .4s ease both; }
+  .log-row:nth-child(3) { animation-delay: .15s; }
+  .log-row:nth-child(4) { animation-delay: .3s; }
+  .log-row:nth-child(5) { animation-delay: .45s; }
+  @keyframes rowIn { from { transform: translateY(4px); } to { transform: none; } }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="mark">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+        <rect x="1" y="1" width="26" height="26" rx="7" fill="var(--accent)"/>
+        <path d="M8 10h9m0 0-3-3m3 3-3 3M20 18h-9m0 0 3-3m-3 3 3 3" stroke="var(--accent-ink)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      afterlimit
+    </div>
+    <span class="tag">v0.1 · runs in your browser</span>
+  </header>
+
+  <section class="hero">
+    <div>
+      <h1>Your AI hit its limit. <em>Your work didn't.</em></h1>
+      <p class="lede">When Claude or Codex runs out mid-task, afterlimit gets a proper handoff note out of the first agent and turns it into a pickup prompt for the next one. The new agent starts where the old one stopped, and you skip re-explaining the project.</p>
+    </div>
+    <div class="log" aria-label="Example shift log">
+      <div class="log-head"><span>Shift log</span><span>example</span></div>
+      <div class="log-row"><time>14:02</time><span>Claude · usage limit reached</span><span class="pill warn">limit</span></div>
+      <div class="log-row"><time>14:02</time><span>Handoff note written</span><span class="pill info">9 / 9 sections</span></div>
+      <div class="log-row"><time>14:03</time><span>Pickup prompt → Codex</span><span class="pill info">copied</span></div>
+      <div class="log-row"><time>14:04</time><span>Codex · picked up, next step started</span><span class="pill ok">0 re-explains</span></div>
+      <div class="log-foot">The goal: zero things you have to type twice.</div>
+    </div>
+  </section>
+
+  <section class="steps" aria-labelledby="steps-title">
+    <div class="steps-head">
+      <h2 id="steps-title">Hand over in three steps</h2>
+      <p>Works with free plans. Nothing leaves this page, so your code and notes stay with you.</p>
+    </div>
+
+    <div class="grid">
+      <div class="step">
+        <span class="step-n">Step 1 · before the limit</span>
+        <h3>Ask for a handoff note</h3>
+        <p>Paste this into the agent that's about to run out. It writes down what a fresh agent would otherwise have to ask you.</p>
+        <pre class="box" id="request"></pre>
+        <div class="btns">
+          <button type="button" id="copy-request">Copy request</button>
+          <span class="copied" id="copied-request" hidden>Copied</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">Step 2 · check the note</span>
+        <h3>Paste what it wrote</h3>
+        <div class="row2">
+          <div>
+            <label for="from">From</label>
+            <select id="from"></select>
+          </div>
+          <div>
+            <label for="to">To</label>
+            <select id="to"></select>
+          </div>
+        </div>
+        <div>
+          <label for="note">Handoff note</label>
+          <textarea id="note" spellcheck="false"></textarea>
+          <div class="btns" style="margin-top:8px">
+            <span class="example" id="example-flag">Showing an example note. Paste yours over it.</span>
+            <button type="button" class="ghost" id="clear-note">Clear</button>
+          </div>
+        </div>
+        <div class="score" id="score" aria-live="polite"></div>
+        <div class="checks" id="checks"></div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">Step 3 · hand it over</span>
+        <h3>Give the next agent this</h3>
+        <p>Open the next agent in the same project folder and paste this as your first message.</p>
+        <pre class="box" id="pickup"></pre>
+        <div class="btns">
+          <button type="button" id="copy-pickup">Copy pickup prompt</button>
+          <span class="copied" id="copied-pickup" hidden>Copied</span>
+        </div>
+        <div class="tip" id="tip"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="why">
+    <h2>Why a note beats the chat log</h2>
+    <div>
+      <p>Most switchers pass along your code and the last message. The code shows what exists. It doesn't show why, and that's where the damage happens. The new agent retries a fix that already failed, or undoes a choice you made an hour ago for a reason it can't see.</p>
+      <p>So afterlimit asks the outgoing agent for the things that only live in its head: what was tried and failed, which decisions were made and why, and the single next step. Step 2 flags any of those that are missing, because every missing section is something you'll end up explaining by hand.</p>
+      <p>There's also a command-line version. Run <code style="font-family:var(--f-mono)">npx afterlimit init</code> in your project and both agents keep the note current while they work, so it's ready the moment a limit hits.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>afterlimit, built by Nivash</span>
+    <span><a href="https://github.com/nivash-devs/afterlimit" style="color:inherit">GitHub</a> · <a href="https://www.npmjs.com/package/afterlimit" style="color:inherit">npm</a></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var SECTIONS = [
+    { key: "Goal", hint: "What we're building and what done looks like." },
+    { key: "Current state", hint: "What works right now and what's broken." },
+    { key: "Done so far", hint: "Finished steps. Name the files and functions." },
+    { key: "Tried and failed", hint: "Approaches that didn't work, and why. The next agent must not retry these." },
+    { key: "Decisions", hint: "Choices we made and the reason for each." },
+    { key: "Open questions", hint: "Anything unresolved, or that I still need to decide." },
+    { key: "Next step", hint: "The single next thing to do." },
+    { key: "Files", hint: "Every file you created or changed, one per line, with a short note." },
+    { key: "Commands", hint: "How to install, run, build and test the project." }
+  ];
+
+  var AGENTS = {
+    claude: { name: "Claude Code", file: "CLAUDE.md" },
+    codex: { name: "Codex", file: "AGENTS.md" },
+    chatgpt: { name: "ChatGPT", file: null },
+    claudeai: { name: "Claude (chat)", file: null },
+    gemini: { name: "Gemini CLI", file: "GEMINI.md" },
+    cursor: { name: "Cursor", file: null }
+  };
+
+  var EXAMPLE = [
+    "## Goal",
+    "A CLI called afterlimit that watches a Claude Code session and writes HANDOFF.md when the usage limit hits. Done = running `afterlimit watch` produces a valid note with no manual steps.",
+    "",
+    "## Current state",
+    "Note writer works. Limit detection is flaky: it misses the limit message about 1 in 4 times.",
+    "",
+    "## Done so far",
+    "- src/note.ts: buildNote() writes all nine sections to HANDOFF.md",
+    "- src/cli.ts: `handshift note` command wired up",
+    "",
+    "## Tried and failed",
+    "- Matching the exact limit message text. The wording changes between versions, so the regex broke twice.",
+    "",
+    "## Decisions",
+    "- TypeScript on Node 20, so it installs with one npx command.",
+    "- Notes are plain Markdown so any agent can read them.",
+    "",
+    "## Open questions",
+    "- Should the note be committed to git or ignored?",
+    "",
+    "## Next step",
+    "Detect the limit from the process exit code and output pattern together in src/watch.ts.",
+    "",
+    "## Files",
+    "- src/note.ts (new)",
+    "- src/cli.ts (new)",
+    "- package.json (added commander)",
+    "",
+    "## Commands",
+    "npm install, npm run build, npm test"
+  ].join("\n");
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function buildRequest() {
+    var lines = [
+      "I'm about to switch to another AI agent to continue this work. Write a handoff note for it.",
+      "",
+      "Use exactly these Markdown headings, in this order, and fill every one:",
+      ""
+    ];
+    SECTIONS.forEach(function (s) { lines.push("## " + s.key); lines.push(s.hint); });
+    lines.push("");
+    lines.push("Write it for an agent that has never seen this conversation. Don't skip anything because it seems obvious. If a section has nothing in it, write \"None\".");
+    return lines.join("\n");
+  }
+
+  function parse(text) {
+    var found = {};
+    var re = /^#{1,4}\s*(.+?)\s*$/gm, m, heads = [];
+    while ((m = re.exec(text)) !== null) heads.push({ title: m[1].toLowerCase().replace(/[*:_`]/g, "").trim(), start: m.index, bodyStart: re.lastIndex });
+    heads.forEach(function (h, i) {
+      var end = i + 1 < heads.length ? heads[i + 1].start : text.length;
+      var body = text.slice(h.bodyStart, end).trim();
+      SECTIONS.forEach(function (s) {
+        if (h.title === s.key.toLowerCase() || h.title.indexOf(s.key.toLowerCase()) === 0) {
+          found[s.key] = body.length > 0 && !/^none\.?$/i.test(body) ? "have" : (/^none\.?$/i.test(body) ? "none" : "empty");
+        }
+      });
+    });
+    return found;
+  }
+
+  function buildPickup(note, fromKey, toKey) {
+    var from = AGENTS[fromKey].name;
+    return [
+      "You're taking over a coding task from another AI agent (" + from + ") that ran out of usage. Its handoff note is below.",
+      "",
+      "Before you change anything:",
+      "1. Read every file listed under Files.",
+      "2. Reply with the goal and the next step in your own words, plus anything in the note that's unclear.",
+      "3. Wait for me to confirm.",
+      "",
+      "Rules: don't redo anything under Done so far. Don't retry anything under Tried and failed. Keep everything under Decisions unless I say otherwise.",
+      "",
+      "--- HANDOFF NOTE ---",
+      note.trim() || "(paste the handoff note in step 2)",
+      "--- END ---"
+    ].join("\n");
+  }
+
+  function tipFor(toKey) {
+    var a = AGENTS[toKey];
+    if (a.file) {
+      return "Want it to survive a restart too? Save the note as <code>HANDOFF.md</code> in the project and add the line <code>Read HANDOFF.md before starting.</code> to <code>" + a.file + "</code>, which " + a.name + " reads when it starts.";
+    }
+    return a.name + " can't see your project folder by itself, so attach or paste the files listed under Files along with the prompt.";
+  }
+
+  function fillSelect(sel, value) {
+    Object.keys(AGENTS).forEach(function (k) {
+      var o = document.createElement("option");
+      o.value = k; o.textContent = AGENTS[k].name;
+      sel.appendChild(o);
+    });
+    sel.value = value;
+  }
+
+  function store(k, v) { try { localStorage.setItem("handshift:" + k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem("handshift:" + k); } catch (e) { return null; } }
+
+  function render() {
+    var note = $("note").value;
+    var found = parse(note);
+    var have = 0, checks = $("checks");
+    checks.innerHTML = "";
+    SECTIONS.forEach(function (s) {
+      var st = found[s.key];
+      var el = document.createElement("span");
+      el.className = "chk " + (st === "have" || st === "none" ? "have" : "miss");
+      el.textContent = (st === "have" || st === "none" ? "✓ " : "✗ ") + s.key;
+      checks.appendChild(el);
+      if (st === "have" || st === "none") have++;
+    });
+    var missing = SECTIONS.length - have;
+    $("score").innerHTML = note.trim()
+      ? (missing === 0
+          ? "<b>" + have + " / " + SECTIONS.length + "</b> sections filled. Nothing to re-explain."
+          : "<b>" + have + " / " + SECTIONS.length + "</b> sections filled. Missing ones are what you'd have to explain by hand, so ask the agent to fill them before it runs out.")
+      : "Paste a note to check it.";
+    $("pickup").textContent = buildPickup(note, $("from").value, $("to").value);
+    $("tip").innerHTML = tipFor($("to").value);
+    $("example-flag").hidden = note !== EXAMPLE;
+  }
+
+  function copy(text, flagId, sourceId) {
+    var flag = $(flagId);
+    function done() { flag.hidden = false; setTimeout(function () { flag.hidden = true; }, 1600); }
+    function fallback() {
+      var r = document.createRange(); r.selectNodeContents($(sourceId));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      flag.textContent = "Selected. Press Ctrl+C or ⌘C"; done();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flag.textContent = "Copied"; done(); }, fallback);
+    } else { fallback(); }
+  }
+
+  $("request").textContent = buildRequest();
+  fillSelect($("from"), load("from") || "claude");
+  fillSelect($("to"), load("to") || "codex");
+  $("note").value = load("note") || EXAMPLE;
+
+  $("note").addEventListener("input", function () { store("note", $("note").value); render(); });
+  $("from").addEventListener("change", function () { store("from", $("from").value); render(); });
+  $("to").addEventListener("change", function () { store("to", $("to").value); render(); });
+  $("clear-note").addEventListener("click", function () { $("note").value = ""; store("note", ""); render(); $("note").focus(); });
+  $("copy-request").addEventListener("click", function () { copy($("request").textContent, "copied-request", "request"); });
+  $("copy-pickup").addEventListener("click", function () { copy($("pickup").textContent, "copied-pickup", "pickup"); });
+
+  render();
+})();
+</script>
+</body>
+</html>
